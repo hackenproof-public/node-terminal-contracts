@@ -20,6 +20,7 @@ const lumiaNodeNTModule = buildModule('LumiaNodeNT', (m) => {
   const ntPaymentAddress = m.getParameter('ntPaymentAddress');
   const maxAllowedNodes = m.getParameter('maxAllowedNodes');
   const ntCommissionsInBp = m.getParameter('ntCommissionsInBp');
+  const nodePrice = m.getParameter('nodePrice');
 
   const lumiaNodeNT = m.contract('LumiaNodeNT', [
     owner,
@@ -27,7 +28,8 @@ const lumiaNodeNTModule = buildModule('LumiaNodeNT', (m) => {
     lumiaPaymentAddress,
     ntPaymentAddress,
     maxAllowedNodes,
-    ntCommissionsInBp
+    ntCommissionsInBp,
+    nodePrice
   ]);
 
   // const receipt = m.call(lumiaNodeNT, 'grantRole', [MASTER_ROLE, owner], {

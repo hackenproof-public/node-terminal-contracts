@@ -7,6 +7,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
+/**
+ * @title Lumia Node sale contract for Node Terminal
+ * @notice This is smart contract that is responsible for handling Lumia nodes sale using Node Terminal platform.
+ * It collects payments in ERC-20 token (in particular USDT) and increases number of nodes assigned to the account. This data will be used for future NFT airdrop.
+ */
 contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
     using SafeERC20 for IERC20;
@@ -14,7 +19,6 @@ contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
     bytes32 public constant MASTER_ROLE = keccak256("MASTER_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    uint256 private constant PRICE_PER_NODE = 1000e6;
     uint256 private constant BP_DIVISOR = 10000;
 
     /**
@@ -52,6 +56,7 @@ contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
      */
     uint256 public immutable ntCommissions;
 
+    uint256 private immutable pricePerNode;
     EnumerableMap.AddressToUintMap private purchasedNodes;
 
     /**
@@ -111,6 +116,9 @@ contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
      * @param erc20PaymentToken Address of payment token
      * @param lumiaPaymentAddress Address of wallet that collects payment
      * @param ntPaymentAddress Address of wallet that collects commissions
+     * @param maxAllowedNodes Maximum number of nodes put on sale
+     * @param ntCommissionsInBp Commissions for NT in basis points
+     * @param nodePrice Price per node
      */
     constructor(
         address owner,
@@ -118,14 +126,16 @@ contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
         address lumiaPaymentAddress,
         address ntPaymentAddress,
         uint256 maxAllowedNodes,
-        uint256 ntCommissionsInBp
+        uint256 ntCommissionsInBp,
+        uint256 nodePrice
     ) {
         if (
             owner == address(0) ||
             maxAllowedNodes == 0 ||
             address(erc20PaymentToken) == address(0) ||
             lumiaPaymentAddress == address(0) ||
-            ntPaymentAddress == address(0)
+            ntPaymentAddress == address(0) ||
+            nodePrice == 0
         ) {
             revert InvalidParameter();
         }
@@ -135,6 +145,7 @@ contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
         lumiaAddress = lumiaPaymentAddress;
         ntAddress = ntPaymentAddress;
         ntCommissions = ntCommissionsInBp;
+        pricePerNode = nodePrice;
 
         _grantRole(DEFAULT_ADMIN_ROLE, owner);
     }
@@ -204,8 +215,8 @@ contract LumiaNodeNT is AccessControlEnumerable, ReentrancyGuard {
     /**
      * @notice Returns node price
      */
-    function getPricePerNode() public pure returns (uint256 price) {
-        return PRICE_PER_NODE;
+    function getPricePerNode() public view returns (uint256 price) {
+        return pricePerNode;
     }
 
     /**

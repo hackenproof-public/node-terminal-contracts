@@ -15,6 +15,7 @@ describe('Lumia Node NT tests', () => {
   const ntPaymentAddress = '0x2222222222222222222222222222222222222222';
   const maxAllowedNodes = 625n;
   const ntCommissionsInBp = 1250n;
+  const nodePrice = 1000e6;
 
   const setup = async () => {
     const [deployer, defaultAdmin, admin, master, user, minter] = await ethers.getSigners();
@@ -30,7 +31,8 @@ describe('Lumia Node NT tests', () => {
           lumiaPaymentAddress,
           ntPaymentAddress,
           maxAllowedNodes,
-          ntCommissionsInBp
+          ntCommissionsInBp,
+          nodePrice
         }
       }
     })) as unknown as { lumiaNodeNT: LumiaNodeNT };
@@ -66,7 +68,8 @@ describe('Lumia Node NT tests', () => {
           lumiaPaymentAddress,
           ntPaymentAddress,
           maxAllowedNodes,
-          ntCommissionsInBp
+          ntCommissionsInBp,
+          nodePrice
         ])
       ).to.be.reverted;
     });
@@ -80,7 +83,8 @@ describe('Lumia Node NT tests', () => {
           lumiaPaymentAddress,
           ntPaymentAddress,
           maxAllowedNodes,
-          ntCommissionsInBp
+          ntCommissionsInBp,
+          nodePrice
         ])
       ).to.be.reverted;
     });
@@ -95,7 +99,8 @@ describe('Lumia Node NT tests', () => {
           ethers.ZeroAddress,
           ntPaymentAddress,
           maxAllowedNodes,
-          ntCommissionsInBp
+          ntCommissionsInBp,
+          nodePrice
         ])
       ).to.be.reverted;
     });
@@ -110,7 +115,8 @@ describe('Lumia Node NT tests', () => {
           lumiaPaymentAddress,
           ethers.ZeroAddress,
           maxAllowedNodes,
-          ntCommissionsInBp
+          ntCommissionsInBp,
+          nodePrice
         ])
       ).to.be.reverted;
     });
@@ -125,7 +131,24 @@ describe('Lumia Node NT tests', () => {
           lumiaPaymentAddress,
           ntPaymentAddress,
           0,
-          ntCommissionsInBp
+          ntCommissionsInBp,
+          nodePrice
+        ])
+      ).to.be.reverted;
+    });
+
+    it('should revert deploying if node price is zero', async () => {
+      const [defaultAdmin] = await ethers.getSigners();
+      const { erc20TestToken } = await ignition.deploy(erc20TestTokenModule);
+      await expect(
+        ethers.deployContract('LumiaNodeNT', [
+          defaultAdmin.address,
+          await erc20TestToken.getAddress(),
+          lumiaPaymentAddress,
+          ntPaymentAddress,
+          maxAllowedNodes,
+          ntCommissionsInBp,
+          0
         ])
       ).to.be.reverted;
     });
