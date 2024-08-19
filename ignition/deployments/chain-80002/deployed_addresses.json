@@ -1,3 +1,7 @@
 {
-  "LumiaNodeNT#LumiaNodeNT": "0xfFa1A38A061bD47b41589e69A9eCd64Fae1D5C77"
+  "LumiaNodeNT#LumiaNodeNT": "0xfFa1A38A061bD47b41589e69A9eCd64Fae1D5C77",
+  "ProxyModule#AirdroppedLicence": "0xf4aEC1b644711176cda5124ba7c355f3CEdA55D1",
+  "ProxyModule#TransparentUpgradeableProxy": "0x4D621BE281a8Fe1c54d4b826b112D461fb9D214C",
+  "ProxyModule#ProxyAdmin": "0xaB1F6EA78c13909Be6A5E3B006B8f36C6A1BA01C",
+  "AirdroppedLicence#AirdroppedLicence": "0x4D621BE281a8Fe1c54d4b826b112D461fb9D214C"
 }

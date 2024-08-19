@@ -2,9 +2,10 @@
   "LumiaNodeNT": {
     "owner": "0xc65F1bcBFc6eD856dbD335bc9f4e748b029bc0Ff",
     "paymentToken": "0x9eeC9890B9d2a97D971e9d04c969F647c2D2295C",
-    "lumiaPaymentAddress": "0xE904ae44F94647b276568d112270AFa7ad75D30E",
-    "ntPaymentAddress": "0xa232A34F6fbF466E54f7FB060d033B1CB53e7B63",
+    "nodeProviderWallet": "0xE904ae44F94647b276568d112270AFa7ad75D30E",
+    "commissionsWallet": "0xa232A34F6fbF466E54f7FB060d033B1CB53e7B63",
     "maxAllowedNodes": 2500,
-    "ntCommissionsInBp": 1250
+    "ntCommissionsInBp": 1250,
+    "nodePrice": 1000e6
   }
 }
