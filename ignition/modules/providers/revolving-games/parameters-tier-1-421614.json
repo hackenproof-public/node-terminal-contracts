@@ -1,0 +1,11 @@
+{
+  "RevolvingGames": {
+    "owner": "0xc65F1bcBFc6eD856dbD335bc9f4e748b029bc0Ff",
+    "paymentToken": "0x05f0BDC9e7ecC1eDD134b309F116AB7fFF2245Ee",
+    "nodeProviderWallet": "0x7c6fffA53F40D1b85f9E583da920a702c61F458D",
+    "commissionsWallet": "0xfD4bE09AED95DBcf2fA7bDB662D4cAEc07eD4BD6",
+    "ntCommissionsInBp": 1500,
+    "tier1MaxAllowedNodes": 7989,
+    "tier1NodePrice": 160e6
+  }
+}
