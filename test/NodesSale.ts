@@ -267,10 +267,84 @@ describe('Nodes Sale tests', () => {
     });
 
     it('should revert if called by a non-admin role', async () => {
-      const { nodesSale, admin, user } = await loadFixture(setupWithErc20);
+      const { nodesSale, user } = await loadFixture(setupWithErc20);
       const numberOfNodes = 5;
 
       await expect(nodesSale.connect(user).addMultipleNodes(user.address, numberOfNodes))
+        .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
+        .withArgs(user.address, ADMIN_ROLE);
+    });
+  });
+
+  describe('setMaxSupply', () => {
+    [
+      { nodes: 10, maxSupply: 10 },
+      { nodes: 10, maxSupply: 11 }
+    ].forEach((data) => {
+      it('should change max supply if value equal or higher than total nodes number', async () => {
+        const { nodesSale, admin } = await loadFixture(setupWithErc20);
+
+        await nodesSale.connect(admin).addMultipleNodes(await admin.getAddress(), data.nodes);
+        await expect(nodesSale.connect(admin).setMaxSupply(data.maxSupply))
+          .to.emit(nodesSale, 'MaxSupplyChanged')
+          .withArgs(await admin.getAddress(), data.maxSupply);
+
+        expect(await nodesSale.maxSupply()).to.equal(data.maxSupply);
+      });
+    });
+
+    it('should revert changing max supply if value lower than already sold', async () => {
+      const { nodesSale, admin } = await loadFixture(setupWithErc20);
+
+      const nodesPurchased = 10;
+      const newMaxSupply = nodesPurchased - 1;
+
+      await nodesSale.connect(admin).addMultipleNodes(await admin.getAddress(), nodesPurchased);
+      await expect(nodesSale.connect(admin).setMaxSupply(newMaxSupply)).to.be.revertedWithCustomError(
+        nodesSale,
+        'InvalidParameter'
+      );
+    });
+
+    it('should revert changing max supply if called by a non-admin role', async () => {
+      const { nodesSale, admin, user } = await loadFixture(setupWithErc20);
+
+      const nodesPurchased = 10;
+      const newMaxSupply = nodesPurchased - 1;
+
+      await nodesSale.connect(admin).addMultipleNodes(await admin.getAddress(), nodesPurchased);
+      await expect(nodesSale.connect(user).setMaxSupply(newMaxSupply))
+        .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
+        .withArgs(user.address, ADMIN_ROLE);
+    });
+  });
+
+  describe('setPricePerNode', () => {
+    it('should change node price', async () => {
+      const { nodesSale, admin } = await loadFixture(setupWithErc20);
+
+      const newPrice = 3000e6;
+      await expect(nodesSale.connect(admin).setPricePerNode(newPrice))
+        .to.emit(nodesSale, 'NodePriceChanged')
+        .withArgs(await admin.getAddress(), newPrice);
+
+      expect(await nodesSale.getPricePerNode()).to.equal(newPrice);
+    });
+
+    it('should revert changing node price if value is equal to zero', async () => {
+      const { nodesSale, admin } = await loadFixture(setupWithErc20);
+
+      await expect(nodesSale.connect(admin).setPricePerNode(0)).to.be.revertedWithCustomError(
+        nodesSale,
+        'InvalidParameter'
+      );
+    });
+
+    it('should revert changing node price if called by a non-admin role', async () => {
+      const { nodesSale, user } = await loadFixture(setupWithErc20);
+
+      const newPrice = 3000e6;
+      await expect(nodesSale.connect(user).setPricePerNode(newPrice))
         .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
         .withArgs(user.address, ADMIN_ROLE);
     });

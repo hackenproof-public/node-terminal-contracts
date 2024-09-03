@@ -34,7 +34,7 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     /**
      * @notice Maximum number of nodes for sale
      */
-    uint256 public immutable maxSupply;
+    uint256 public maxSupply;
 
     /**
      * @notice Address of token used for payment
@@ -56,7 +56,7 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
      */
     uint256 public immutable ntCommissions;
 
-    uint256 private immutable pricePerNode;
+    uint256 private pricePerNode;
     EnumerableMap.AddressToUintMap private purchasedNodes;
 
     /**
@@ -85,6 +85,20 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
      * @param isActive New activation status
      */
     event SaleActivationSet(bool indexed isActive);
+
+    /**
+     * @notice Emitted when max supply is changed
+     * @param account Address of wallet that changes max supply
+     * @param newMaxSupply New max supply
+     */
+    event MaxSupplyChanged(address indexed account, uint256 indexed newMaxSupply);
+
+    /**
+     * @notice Emitted when node price is changed
+     * @param account Address of wallet that changes node price
+     * @param newPrice New node price
+     */
+    event NodePriceChanged(address indexed account, uint256 indexed newPrice);
 
     /**
      * @notice Raised when number of nodes exceeds the available ones
@@ -223,6 +237,32 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     function addMultipleNodes(address account, uint256 numberOfNodes) external onlyRole(ADMIN_ROLE) {
         addNodes(account, numberOfNodes);
         emit NodesAirdropped(account, numberOfNodes);
+    }
+
+    /**
+     * @notice Sets max supply
+     * @dev Requires admin role
+     * @param newMaxSupply New max supply
+     */
+    function setMaxSupply(uint256 newMaxSupply) external onlyRole(ADMIN_ROLE) {
+        if (newMaxSupply < nodeCount) {
+            revert InvalidParameter();
+        }
+        maxSupply = newMaxSupply;
+        emit MaxSupplyChanged(msg.sender, newMaxSupply);
+    }
+
+    /**
+     * @notice Sets price per node
+     * @dev Requires admin role
+     * @param newPrice New price per node
+     */
+    function setPricePerNode(uint256 newPrice) external onlyRole(ADMIN_ROLE) {
+        if (newPrice == 0) {
+            revert InvalidParameter();
+        }
+        pricePerNode = newPrice;
+        emit NodePriceChanged(msg.sender, newPrice);
     }
 
     /**
