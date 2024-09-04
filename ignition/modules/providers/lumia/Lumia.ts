@@ -5,7 +5,6 @@ import erc20TestTokenModule from '../../test/ERC20TestToken';
 const lumiaModule = buildModule('Lumia', (m) => {
   let paymentToken;
   if (hre.network.name in ['hardhat', 'localhost']) {
-    console.log(`localhost`);
     const { erc20TestToken } = m.useModule(erc20TestTokenModule);
     paymentToken = erc20TestToken;
   } else {

@@ -18,6 +18,7 @@ const nodesSaleModule = buildModule('NodesSale', (m) => {
   const maxAllowedNodes = m.getParameter('maxAllowedNodes');
   const ntCommissionsInBp = m.getParameter('ntCommissionsInBp');
   const nodePrice = m.getParameter('nodePrice');
+  const commonCap = m.getParameter('commonCap');
 
   const nodesSale = m.contract('NodesSale', [
     owner,
@@ -26,7 +27,8 @@ const nodesSaleModule = buildModule('NodesSale', (m) => {
     commissionsWallet,
     maxAllowedNodes,
     ntCommissionsInBp,
-    nodePrice
+    nodePrice,
+    commonCap
   ]);
 
   return { nodesSale };

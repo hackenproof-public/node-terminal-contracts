@@ -1,0 +1,12 @@
+{
+  "Privasea": {
+    "owner": "0xc65F1bcBFc6eD856dbD335bc9f4e748b029bc0Ff",
+    "paymentToken": "0x0000000000000000000000000000000000000000",
+    "nodeProviderWallet": "0xE904ae44F94647b276568d112270AFa7ad75D30E",
+    "commissionsWallet": "0xc65F1bcBFc6eD856dbD335bc9f4e748b029bc0Ff",
+    "maxAllowedNodes": 1200,
+    "ntCommissionsInBp": 2000,
+    "nodePrice": "100000000000000",
+    "commonCap": 0
+  }
+}

@@ -1,6 +1,6 @@
 import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
-import { parseEther, ZeroAddress } from 'ethers';
+import { MaxUint256, parseEther, ZeroAddress } from 'ethers';
 import { ethers, ignition } from 'hardhat';
 import nodesSaleModule from '../ignition/modules/NodesSale';
 import erc20TestTokenModule from '../ignition/modules/test/ERC20TestToken';
@@ -16,6 +16,7 @@ describe('Nodes Sale tests', () => {
   const maxAllowedNodes = 625n;
   const ntCommissionsInBp = 1250n;
   const nodePrice = 1000e6;
+  const commonWalletCap = 20n;
 
   const setupWithErc20 = async () => {
     const [deployer, defaultAdmin, admin, master, user, minter] = await ethers.getSigners();
@@ -32,7 +33,8 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           ntCommissionsInBp,
-          nodePrice
+          nodePrice,
+          commonCap: commonWalletCap
         }
       }
     })) as unknown as { nodesSale: NodesSale };
@@ -57,7 +59,8 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           ntCommissionsInBp,
-          nodePrice
+          nodePrice,
+          commonCap: commonWalletCap
         }
       }
     })) as unknown as { nodesSale: NodesSale };
@@ -80,6 +83,7 @@ describe('Nodes Sale tests', () => {
       expect(await nodesSale.hasRole(DEFAULT_ADMIN_ROLE, defaultAdmin)).to.be.true;
       expect(await nodesSale.hasRole(ADMIN_ROLE, admin)).to.be.true;
       expect(await nodesSale.hasRole(MASTER_ROLE, master)).to.be.true;
+      expect(await nodesSale.commonWalletCap()).to.equal(commonWalletCap);
     });
 
     it('should revert deploying if owner is zero address', async () => {
@@ -92,12 +96,13 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           ntCommissionsInBp,
-          nodePrice
+          nodePrice,
+          commonWalletCap
         ])
       ).to.be.reverted;
     });
 
-    it('should revert deploying if lumia payment address is zero address', async () => {
+    it('should revert deploying if node provider wallet address is zero address', async () => {
       const [defaultAdmin] = await ethers.getSigners();
       const { erc20TestToken } = await ignition.deploy(erc20TestTokenModule);
       await expect(
@@ -108,12 +113,13 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           ntCommissionsInBp,
-          nodePrice
+          nodePrice,
+          commonWalletCap
         ])
       ).to.be.reverted;
     });
 
-    it('should revert deploying if NT payment address is zero address', async () => {
+    it('should revert deploying if NT wallet address is zero address', async () => {
       const [defaultAdmin] = await ethers.getSigners();
       const { erc20TestToken } = await ignition.deploy(erc20TestTokenModule);
       await expect(
@@ -124,7 +130,8 @@ describe('Nodes Sale tests', () => {
           ethers.ZeroAddress,
           maxAllowedNodes,
           ntCommissionsInBp,
-          nodePrice
+          nodePrice,
+          commonWalletCap
         ])
       ).to.be.reverted;
     });
@@ -140,7 +147,8 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           0,
           ntCommissionsInBp,
-          nodePrice
+          nodePrice,
+          commonWalletCap
         ])
       ).to.be.reverted;
     });
@@ -156,7 +164,8 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           0,
-          nodePrice
+          nodePrice,
+          commonWalletCap
         ])
       ).to.be.reverted;
     });
@@ -172,7 +181,8 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           ntCommissionsInBp,
-          0
+          0,
+          commonWalletCap
         ])
       ).to.be.reverted;
     });
@@ -350,8 +360,64 @@ describe('Nodes Sale tests', () => {
     });
   });
 
+  describe('setCommonWalletCap', () => {
+    it('should change common wallet cap', async () => {
+      const { nodesSale, admin } = await loadFixture(setupWithErc20);
+
+      const newCap = 30n;
+      await expect(nodesSale.connect(admin).setCommonWalletCap(newCap))
+        .to.emit(nodesSale, 'CommonWalletCapChanged')
+        .withArgs(await admin.getAddress(), newCap);
+
+      expect(await nodesSale.commonWalletCap()).to.equal(newCap);
+      expect(await nodesSale.getWalletCap(admin.address)).to.equal(newCap);
+    });
+
+    it('should revert changing common wallet cap if called by a non-admin role', async () => {
+      const { nodesSale, user } = await loadFixture(setupWithErc20);
+
+      const newCap = 30n;
+      await expect(nodesSale.connect(user).setCommonWalletCap(newCap))
+        .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
+        .withArgs(user.address, ADMIN_ROLE);
+    });
+  });
+
+  describe('setSingleWalletCap', () => {
+    it('should change single wallet cap', async () => {
+      const { nodesSale, admin, user } = await loadFixture(setupWithErc20);
+
+      expect(await nodesSale.getWalletCap(user.address)).to.equal(commonWalletCap);
+
+      const newCap = 30n;
+      await expect(nodesSale.connect(admin).setSingleWalletCap([user.address, admin.address], newCap))
+        .to.emit(nodesSale, 'SingleWalletCapChanged')
+        .withArgs(await admin.getAddress(), user.address, newCap);
+
+      expect(await nodesSale.getWalletCap(user.address)).to.equal(newCap);
+      expect(await nodesSale.getWalletCap(admin.address)).to.equal(newCap);
+    });
+
+    it('should revert changing single wallet cap if called by a non-admin role', async () => {
+      const { nodesSale, user } = await loadFixture(setupWithErc20);
+
+      await expect(nodesSale.connect(user).setSingleWalletCap([user.address], 30n))
+        .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
+        .withArgs(user.address, ADMIN_ROLE);
+    });
+
+    it('should revert changing single wallet cap if no wallet passed', async () => {
+      const { nodesSale, admin } = await loadFixture(setupWithErc20);
+
+      await expect(nodesSale.connect(admin).setSingleWalletCap([], 30n)).to.be.revertedWithCustomError(
+        nodesSale,
+        'InvalidParameter'
+      );
+    });
+  });
+
   describe('purchaseNodes', () => {
-    [1n, maxAllowedNodes].forEach((quantity) =>
+    [1n, commonWalletCap].forEach((quantity) =>
       it(`should purchase nodes [quantity=${quantity}]`, async () => {
         const { nodesSale, ett, master, user } = await loadFixture(setupWithErc20);
         const nodePrice = await nodesSale.getPricePerNode();
@@ -424,6 +490,20 @@ describe('Nodes Sale tests', () => {
       await expect(nodesSale.connect(user).purchaseNodes(1)).to.be.revertedWithCustomError(nodesSale, 'SaleNotActive');
     });
 
+    it('should revert if common cap is exceeded', async () => {
+      const { nodesSale, ett, master, user } = await loadFixture(setupWithErc20);
+      const nodePrice = await nodesSale.getPricePerNode();
+
+      await nodesSale.connect(master).setIsSaleActive(true);
+
+      const quantity = commonWalletCap + 1n;
+      await ett.connect(user).approve(await nodesSale.getAddress(), quantity * nodePrice);
+      await expect(nodesSale.connect(user).purchaseNodes(quantity)).to.be.revertedWithCustomError(
+        nodesSale,
+        'WalletCapExceeded'
+      );
+    });
+
     it('should revert if purchasing zero nodes', async () => {
       const { nodesSale, master, user } = await loadFixture(setupWithErc20);
 
@@ -462,11 +542,12 @@ describe('Nodes Sale tests', () => {
     });
 
     it('should revert if max allowed tokens exceeded', async () => {
-      const { nodesSale, ett, master, user } = await loadFixture(setupWithErc20);
+      const { nodesSale, ett, admin, master, user } = await loadFixture(setupWithErc20);
       const nodePrice = await nodesSale.getPricePerNode();
-      const maxSupply = await nodesSale.maxSupply();
+      const maxSupply = 10n;
       const quantity = maxSupply + 1n;
 
+      await nodesSale.connect(admin).setMaxSupply(maxSupply);
       await nodesSale.connect(master).setIsSaleActive(true);
 
       await ett.connect(user).approve(await nodesSale.getAddress(), BigInt(quantity) * nodePrice);
@@ -476,7 +557,7 @@ describe('Nodes Sale tests', () => {
       );
     });
 
-    [1n, maxAllowedNodes].forEach((quantity) => {
+    [1n, commonWalletCap].forEach((quantity) => {
       it(`should purchase nodes with ETH [quantity=${quantity}]`, async () => {
         const { nodesSale, master, user } = await loadFixture(setupWithEth);
         const nodePrice = await nodesSale.getPricePerNode();
