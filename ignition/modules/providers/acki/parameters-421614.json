@@ -1,0 +1,11 @@
+{
+  "Acki": {
+    "owner": "0xc65F1bcBFc6eD856dbD335bc9f4e748b029bc0Ff",
+    "paymentToken": "0x05f0BDC9e7ecC1eDD134b309F116AB7fFF2245Ee",
+    "nodeProviderWallet": "0xC9D7BC84c93EF77b75247c48A96E2EB1188Fe926",
+    "commissionsWallet": "0xfD4bE09AED95DBcf2fA7bDB662D4cAEc07eD4BD6",
+    "ntCommissionsInBp": 2000,
+    "tier1MaxAllowedNodes": 866,
+    "tier1NodePrice": 1500e6
+  }
+}
