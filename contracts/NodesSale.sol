@@ -10,7 +10,7 @@ import {EnumerableMap} from "@openzeppelin/contracts/utils/structs/EnumerableMap
 /**
  * @title Node sale contract for Node Terminal
  * @notice This is smart contract that is responsible for handling nodes sale using Node Terminal platform.
- * It collects payments in ERC-20 token (in particular USDT) and increases number of nodes assigned to the account. This data will be used for future NFT airdrop.
+ * It collects payments in ERC-20 token or ETH and increases number of nodes assigned to the account. This data will be used for future NFT airdrop.
  */
 contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     using EnumerableMap for EnumerableMap.AddressToUintMap;
@@ -49,12 +49,12 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     /**
      * @notice Address of wallet that collects payments
      */
-    address public immutable nodeProviderWallet;
+    address public nodeProviderWallet;
 
     /**
      * @notice Address of wallet that collects commissions
      */
-    address public immutable commissionsWallet;
+    address public commissionsWallet;
 
     /**
      * @notice Commissions in basis points
@@ -122,6 +122,20 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     event SingleWalletCapChanged(address indexed caller, address indexed account, uint256 indexed newCap);
 
     /**
+     * @notice Emitted when node provider wallet is changed
+     * @param caller Address of wallet that changes provider wallet
+     * @param newWallet Address of new provider wallet
+     */
+    event NodeProviderWalletChanged(address indexed caller, address indexed newWallet);
+
+    /**
+     * @notice Emitted when commissions wallet is changed
+     * @param caller Address of wallet that changes commissions wallet
+     * @param newWallet Address of new commissions wallet
+     */
+    event CommissionsWalletChanged(address indexed caller, address indexed newWallet);
+
+    /**
      * @notice Raised when number of nodes exceeds the available ones
      */
     error NodesAllAllocated();
@@ -157,6 +171,11 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     error WalletCapExceeded();
 
     /**
+     * @notice Raised when transfer failed
+     */
+    error TransferFailed();
+
+    /**
      * @notice Initialize smart contract
      * @param owner Address of contract owner
      * @param erc20PaymentToken Address of payment token, if 0x0 then ETH is used
@@ -183,6 +202,7 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
             ntPaymentAddress == address(0) ||
             maxAllowedNodes == 0 ||
             ntCommissionsInBp == 0 ||
+            ntCommissionsInBp >= BP_DIVISOR ||
             nodePrice == 0
         ) {
             revert InvalidParameter();
@@ -243,18 +263,45 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
      * @param value New number of nodes
      */
     function setNumberOfNodes(address account, uint256 value) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        uint256 userBalance = getNumberOfNodes(account);
-        uint256 newNodeCount = value > userBalance
-            ? nodeCount + (value - userBalance)
-            : nodeCount - (userBalance - value);
+        uint256 walletNodeCount = getNumberOfNodes(account);
+        uint256 newNodeCount = value > walletNodeCount
+            ? nodeCount + (value - walletNodeCount)
+            : nodeCount - (walletNodeCount - value);
 
         if (newNodeCount > maxSupply) {
             revert NodesAllAllocated();
         }
+        _validateWalletCap(account, value);
 
         nodeCount = newNodeCount;
         purchasedNodes.set(account, value);
         emit NumberOfNodesUpdated(account, value);
+    }
+
+    /**
+     * @notice Sets node provider wallet
+     * @dev Requires default admin role
+     * @param newWallet Address of wallet
+     */
+    function setNodeProviderWallet(address newWallet) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newWallet == address(0)) {
+            revert ZeroAddress();
+        }
+        nodeProviderWallet = newWallet;
+        emit NodeProviderWalletChanged(msg.sender, newWallet);
+    }
+
+    /**
+     * @notice Sets commissions wallet
+     * @dev Requires default admin role
+     * @param newWallet Address of wallet
+     */
+    function setCommissionsWallet(address newWallet) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (newWallet == address(0)) {
+            revert ZeroAddress();
+        }
+        commissionsWallet = newWallet;
+        emit CommissionsWalletChanged(msg.sender, newWallet);
     }
 
     /**
@@ -334,14 +381,26 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
 
     /**
      * @notice Returns accounts addresses and corresponding number of purchased nodes
+     * @param start Index of the first account
+     * @param count Number of accounts to return
      */
-    function getAccountsAndNumberOfNodes() external view returns (address[] memory accounts, uint256[] memory nodes) {
+    function getAccountsAndNumberOfNodes(
+        uint256 start,
+        uint256 count
+    ) external view returns (address[] memory accounts, uint256[] memory nodes) {
         uint256 nodesLength = purchasedNodes.length();
-        accounts = new address[](nodesLength);
-        nodes = new uint256[](nodesLength);
+        if (start >= nodesLength) {
+            revert InvalidParameter();
+        }
+        if (start + count > nodesLength) {
+            count = nodesLength - start;
+        }
 
-        for (uint256 i = 0; i < nodesLength; ) {
-            (address account, uint256 value) = purchasedNodes.at(i);
+        accounts = new address[](count);
+        nodes = new uint256[](count);
+
+        for (uint256 i = 0; i < count; ) {
+            (address account, uint256 value) = purchasedNodes.at(start + i);
             accounts[i] = account;
             nodes[i] = value;
             unchecked {
@@ -349,6 +408,13 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
             }
         }
         return (accounts, nodes);
+    }
+
+    /**
+     * @notice Returns number of accounts that purchased nodes
+     */
+    function getAccountsCount() external view returns (uint256) {
+        return purchasedNodes.length();
     }
 
     /**
@@ -398,6 +464,11 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
 
         uint256 providerAmount = totalAmount - ntCommissionsAmount;
         send(nodeProviderWallet, providerAmount);
+
+        uint256 toPayBack = checkForRedundantEth(totalAmount);
+        if (toPayBack > 0) {
+            send(msg.sender, toPayBack);
+        }
     }
 
     function addNodes(address account, uint256 numberOfNodes) internal {
@@ -407,10 +478,7 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
         }
 
         uint256 newWalletNodeCount = getNumberOfNodes(account) + numberOfNodes;
-        uint256 cap = getWalletCap(account);
-        if (cap > 0 && newWalletNodeCount > cap) {
-            revert WalletCapExceeded();
-        }
+        _validateWalletCap(account, newWalletNodeCount);
 
         nodeCount += numberOfNodes;
         purchasedNodes.set(account, newWalletNodeCount);
@@ -418,9 +486,18 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
 
     function send(address destination, uint256 amount) internal {
         if (paymentToken == address(0)) {
-            payable(destination).transfer(amount);
+            (bool success, ) = destination.call{value: amount}("");
+            if (!success) revert TransferFailed();
         } else {
             IERC20(paymentToken).safeTransferFrom(msg.sender, destination, amount);
+        }
+    }
+
+    function checkForRedundantEth(uint256 totalCost) internal view returns (uint256) {
+        if (paymentToken == address(0)) {
+            return msg.value - totalCost;
+        } else {
+            return msg.value;
         }
     }
 
@@ -437,5 +514,12 @@ contract NodesSale is AccessControlEnumerable, ReentrancyGuard {
     function _setCommonWalletCap(uint256 cap) internal {
         commonWalletCap = cap;
         emit CommonWalletCapChanged(msg.sender, cap);
+    }
+
+    function _validateWalletCap(address account, uint256 newNumberOfNodes) internal view {
+        uint256 cap = getWalletCap(account);
+        if (cap > 0 && newNumberOfNodes > cap) {
+            revert WalletCapExceeded();
+        }
     }
 }

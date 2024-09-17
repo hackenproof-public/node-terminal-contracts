@@ -1,6 +1,7 @@
+import { SignerWithAddress } from '@nomicfoundation/hardhat-ethers/signers';
 import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
-import { MaxUint256, parseEther, ZeroAddress } from 'ethers';
+import { parseEther, ZeroAddress } from 'ethers';
 import { ethers, ignition } from 'hardhat';
 import nodesSaleModule from '../ignition/modules/NodesSale';
 import erc20TestTokenModule from '../ignition/modules/test/ERC20TestToken';
@@ -90,7 +91,7 @@ describe('Nodes Sale tests', () => {
       const { erc20TestToken } = await ignition.deploy(erc20TestTokenModule);
       await expect(
         ethers.deployContract('NodesSale', [
-          ethers.ZeroAddress,
+          ZeroAddress,
           await erc20TestToken.getAddress(),
           nodeProviderWallet,
           commissionsWallet,
@@ -109,7 +110,7 @@ describe('Nodes Sale tests', () => {
         ethers.deployContract('NodesSale', [
           defaultAdmin.address,
           await erc20TestToken.getAddress(),
-          ethers.ZeroAddress,
+          ZeroAddress,
           commissionsWallet,
           maxAllowedNodes,
           ntCommissionsInBp,
@@ -127,7 +128,7 @@ describe('Nodes Sale tests', () => {
           defaultAdmin.address,
           await erc20TestToken.getAddress(),
           nodeProviderWallet,
-          ethers.ZeroAddress,
+          ZeroAddress,
           maxAllowedNodes,
           ntCommissionsInBp,
           nodePrice,
@@ -164,6 +165,23 @@ describe('Nodes Sale tests', () => {
           commissionsWallet,
           maxAllowedNodes,
           0,
+          nodePrice,
+          commonWalletCap
+        ])
+      ).to.be.reverted;
+    });
+
+    it('should revert deploying if commissions is equal to 100%', async () => {
+      const [defaultAdmin] = await ethers.getSigners();
+      const { erc20TestToken } = await ignition.deploy(erc20TestTokenModule);
+      await expect(
+        ethers.deployContract('NodesSale', [
+          defaultAdmin.address,
+          await erc20TestToken.getAddress(),
+          nodeProviderWallet,
+          commissionsWallet,
+          maxAllowedNodes,
+          10000,
           nodePrice,
           commonWalletCap
         ])
@@ -229,21 +247,66 @@ describe('Nodes Sale tests', () => {
       expect(await nodesSale.nodeCount()).to.equal(value2);
     });
 
-    it('should return nodes for all accounts', async () => {
-      const { nodesSale, defaultAdmin, admin, master, user } = await loadFixture(setupWithErc20);
-
+    describe('when nodes are set to accounts', async () => {
       const userValue = 10;
       const masterValue = 15;
       const adminValue = 17;
-      await nodesSale.connect(defaultAdmin).setNumberOfNodes(user.address, userValue);
-      await nodesSale.connect(defaultAdmin).setNumberOfNodes(master.address, masterValue);
-      await nodesSale.connect(defaultAdmin).setNumberOfNodes(admin.address, adminValue);
+      let nodesSale: NodesSale;
+      let defaultAdmin: SignerWithAddress;
+      let admin: SignerWithAddress;
+      let master: SignerWithAddress;
+      let user: SignerWithAddress;
 
-      expect(await nodesSale.nodeCount()).to.equal(userValue + masterValue + adminValue);
-      expect(await nodesSale.getAccountsAndNumberOfNodes()).to.deep.equal([
-        [user.address, master.address, admin.address],
-        [userValue, masterValue, adminValue]
-      ]);
+      before(async () => {
+        ({ nodesSale, defaultAdmin, admin, master, user } = await loadFixture(setupWithErc20));
+        await nodesSale.connect(defaultAdmin).setNumberOfNodes(user.address, userValue);
+        await nodesSale.connect(defaultAdmin).setNumberOfNodes(master.address, masterValue);
+        await nodesSale.connect(defaultAdmin).setNumberOfNodes(admin.address, adminValue);
+      });
+
+      it('should total accounts number be equal to accounts holding nodes', async () => {
+        expect(await nodesSale.getAccountsCount()).to.equal(3n);
+      });
+
+      it('should total node count be a sum of all accounts', async () => {
+        expect(await nodesSale.nodeCount()).to.equal(userValue + masterValue + adminValue);
+      });
+
+      it('should return empty arrays if count is equal to 0', async () => {
+        expect(await nodesSale.getAccountsAndNumberOfNodes(0n, 0n)).to.deep.equal([[], []]);
+      });
+
+      it('should return all accounts if `count` is equal to total count', async () => {
+        expect(await nodesSale.getAccountsAndNumberOfNodes(0n, 3n)).to.deep.equal([
+          [user.address, master.address, admin.address],
+          [userValue, masterValue, adminValue]
+        ]);
+      });
+
+      it('should return all accounts if `count` is greater than total count', async () => {
+        expect(await nodesSale.getAccountsAndNumberOfNodes(0n, 4n)).to.deep.equal([
+          [user.address, master.address, admin.address],
+          [userValue, masterValue, adminValue]
+        ]);
+      });
+
+      it('should return `count` accounts if it is lower than total count', async () => {
+        expect(await nodesSale.getAccountsAndNumberOfNodes(0n, 2n)).to.deep.equal([
+          [user.address, master.address],
+          [userValue, masterValue]
+        ]);
+      });
+
+      it('should return accounts if start index is greater than 0', async () => {
+        expect(await nodesSale.getAccountsAndNumberOfNodes(1n, 1n)).to.deep.equal([[master.address], [masterValue]]);
+      });
+
+      it('should revert if start index is equal to total count', async () => {
+        await expect(nodesSale.getAccountsAndNumberOfNodes(3n, 1n)).to.be.revertedWithCustomError(
+          nodesSale,
+          'InvalidParameter'
+        );
+      });
     });
 
     it('should revert if the number of nodes exceeds the maximum allowed', async () => {
@@ -261,6 +324,64 @@ describe('Nodes Sale tests', () => {
       await expect(nodesSale.connect(user).setNumberOfNodes(user.address, 5))
         .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
         .withArgs(user.address, DEFAULT_ADMIN_ROLE);
+    });
+  });
+
+  describe('setNodeProviderWallet', () => {
+    it('should change node provider wallet address', async () => {
+      const { nodesSale, defaultAdmin } = await loadFixture(setupWithErc20);
+
+      const newWallet = ethers.HDNodeWallet.createRandom().address;
+      await expect(nodesSale.connect(defaultAdmin).setNodeProviderWallet(newWallet))
+        .to.emit(nodesSale, 'NodeProviderWalletChanged')
+        .withArgs(await defaultAdmin.getAddress(), newWallet);
+    });
+
+    it('should revert if called by a non-defaultadmin role', async () => {
+      const { nodesSale, user } = await loadFixture(setupWithErc20);
+
+      const newWallet = ethers.HDNodeWallet.createRandom().address;
+      await expect(nodesSale.connect(user).setNodeProviderWallet(newWallet))
+        .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
+        .withArgs(user.address, DEFAULT_ADMIN_ROLE);
+    });
+
+    it('should revert if new wallet address is zero address', async () => {
+      const { nodesSale, defaultAdmin } = await loadFixture(setupWithErc20);
+
+      await expect(nodesSale.connect(defaultAdmin).setNodeProviderWallet(ZeroAddress)).to.be.revertedWithCustomError(
+        nodesSale,
+        'ZeroAddress'
+      );
+    });
+  });
+
+  describe('setCommissionsWallet', () => {
+    it('should change node provider wallet address', async () => {
+      const { nodesSale, defaultAdmin } = await loadFixture(setupWithErc20);
+
+      const newWallet = ethers.HDNodeWallet.createRandom().address;
+      await expect(nodesSale.connect(defaultAdmin).setCommissionsWallet(newWallet))
+        .to.emit(nodesSale, 'CommissionsWalletChanged')
+        .withArgs(await defaultAdmin.getAddress(), newWallet);
+    });
+
+    it('should revert if called by a non-defaultadmin role', async () => {
+      const { nodesSale, user } = await loadFixture(setupWithErc20);
+
+      const newWallet = ethers.HDNodeWallet.createRandom().address;
+      await expect(nodesSale.connect(user).setCommissionsWallet(newWallet))
+        .to.be.revertedWithCustomError(nodesSale, 'AccessControlUnauthorizedAccount')
+        .withArgs(user.address, DEFAULT_ADMIN_ROLE);
+    });
+
+    it('should revert if new wallet address is zero address', async () => {
+      const { nodesSale, defaultAdmin } = await loadFixture(setupWithErc20);
+
+      await expect(nodesSale.connect(defaultAdmin).setCommissionsWallet(ZeroAddress)).to.be.revertedWithCustomError(
+        nodesSale,
+        'ZeroAddress'
+      );
     });
   });
 
@@ -588,6 +709,87 @@ describe('Nodes Sale tests', () => {
 
       expect(await ethers.provider.getBalance(nodeProviderWallet)).to.equal(875e6);
       expect(await ethers.provider.getBalance(commissionsWallet)).to.equal(125e6);
+    });
+
+    it('should transfer redundant ETH back to sender', async () => {
+      const { nodesSale, master, user } = await loadFixture(setupWithEth);
+      const nodePrice = await nodesSale.getPricePerNode();
+      const userBalance = await ethers.provider.getBalance(user.address);
+
+      const totalCost = nodePrice;
+      const overpayment = 100n;
+      const valueSent = totalCost + overpayment;
+
+      await nodesSale.connect(master).setIsSaleActive(true);
+      const tx = await nodesSale.connect(user).purchaseNodes(1n, { value: valueSent });
+      const receipt = await tx.wait();
+
+      expect(await ethers.provider.getBalance(user.address)).to.equal(userBalance - receipt!.fee - totalCost);
+    });
+
+    it('should revert transfering redundant ETH back to sender if ETH transfer fails', async () => {
+      const { nodesSale, master, user } = await loadFixture(setupWithEth);
+      const walletMock = await ethers.deployContract('WalletMock', []);
+      const nodePrice = await nodesSale.getPricePerNode();
+
+      const totalCost = nodePrice;
+      const overpayment = 100n;
+      const valueSent = totalCost + overpayment;
+
+      await nodesSale.connect(master).setIsSaleActive(true);
+      const calldata = nodesSale.interface.encodeFunctionData('purchaseNodes', [1n]);
+
+      await expect(
+        walletMock.connect(user).callFunction(await nodesSale.getAddress(), calldata, { value: valueSent })
+      ).to.be.revertedWithCustomError(walletMock, 'TransferFailed');
+    });
+
+    it('should revert if node provider wallet reverts ETH transfer', async () => {
+      const [defaultAdmin, admin, master, user] = await ethers.getSigners();
+      const walletMock = await ethers.deployContract('WalletMock', []);
+
+      const nodesSale = await ethers.deployContract('NodesSale', [
+        await defaultAdmin.getAddress(),
+        ZeroAddress,
+        await walletMock.getAddress(),
+        commissionsWallet,
+        maxAllowedNodes,
+        ntCommissionsInBp,
+        nodePrice,
+        commonWalletCap
+      ]);
+      await nodesSale.connect(defaultAdmin).grantRole(ADMIN_ROLE, admin.address);
+      await nodesSale.connect(defaultAdmin).grantRole(MASTER_ROLE, master.address);
+
+      await nodesSale.connect(master).setIsSaleActive(true);
+      await expect(nodesSale.connect(user).purchaseNodes(1n, { value: nodePrice })).to.be.revertedWithCustomError(
+        nodesSale,
+        'TransferFailed'
+      );
+    });
+
+    it('should revert if commissions wallet reverts ETH transfer', async () => {
+      const [defaultAdmin, admin, master, user] = await ethers.getSigners();
+      const walletMock = await ethers.deployContract('WalletMock', []);
+
+      const nodesSale = await ethers.deployContract('NodesSale', [
+        await defaultAdmin.getAddress(),
+        ZeroAddress,
+        nodeProviderWallet,
+        await walletMock.getAddress(),
+        maxAllowedNodes,
+        ntCommissionsInBp,
+        nodePrice,
+        commonWalletCap
+      ]);
+      await nodesSale.connect(defaultAdmin).grantRole(ADMIN_ROLE, admin.address);
+      await nodesSale.connect(defaultAdmin).grantRole(MASTER_ROLE, master.address);
+
+      await nodesSale.connect(master).setIsSaleActive(true);
+      await expect(nodesSale.connect(user).purchaseNodes(1n, { value: nodePrice })).to.be.revertedWithCustomError(
+        nodesSale,
+        'TransferFailed'
+      );
     });
 
     it('should revert if insufficient ETH sent', async () => {
